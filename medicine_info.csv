@@ -1,0 +1,21 @@
+medicine_name,category,default_rule,warning
+Paracetamol,Painkiller,After Food,Do not exceed recommended dosage
+Ibuprofen,Anti-inflammatory,After Food,Avoid taking on an empty stomach
+Amoxicillin,Antibiotic,After Food,Complete the full treatment course
+Aspirin,Blood thinner,After Food,Can increase bleeding risk
+Metformin,Diabetes medicine,With Food,Take with meals to reduce stomach discomfort
+Omeprazole,Stomach medicine,Before Food,Usually taken before breakfast
+Atorvastatin,Cholesterol medicine,After Food,Report unexplained muscle pain
+Amlodipine,Blood pressure medicine,After Food,May cause ankle swelling
+Lisinopril,Blood pressure medicine,After Food,Monitor blood pressure regularly
+Cetirizine,Antihistamine,After Food,May cause drowsiness
+Loratadine,Antihistamine,After Food,Do not exceed one daily dose unless advised
+Azithromycin,Antibiotic,After Food,Finish the prescribed course
+Vitamin D,Supplement,With Food,Take with food for better absorption
+Magnesium,Supplement,After Food,High doses may cause diarrhea
+Insulin,Diabetes medicine,Before Food,Check blood sugar before use
+Salbutamol,Asthma medicine,Before Food,Seek help if breathing does not improve
+Losartan,Blood pressure medicine,After Food,Avoid during pregnancy unless advised
+Pantoprazole,Stomach medicine,Before Food,Best taken before breakfast
+Diclofenac,Anti-inflammatory,After Food,Avoid if stomach ulcer history unless advised
+Folic Acid,Supplement,After Food,Take regularly as prescribed

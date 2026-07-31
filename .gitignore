@@ -1,0 +1,35 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local database and generated local files
+pharma_guard.db
+*.db-journal
+*.sqlite
+*.sqlite3
+user_info.txt
+Requirments short.txt
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
+
+# IDE/editor files
+.idea/
+.vscode/
+*.swp
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Test/cache folders
+.pytest_cache/
+.mypy_cache/
