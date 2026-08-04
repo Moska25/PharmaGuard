@@ -1,5 +1,7 @@
-APScheduler==3.11.2
-matplotlib==3.10.9
-pandas==3.0.0
-plyer==2.1.0
-PyQt5==5.15.11
+# Runtime dependencies. Lower bounds rather than exact pins so the app installs
+# cleanly on Python 3.10-3.13. Versions in comments are what CI last verified.
+APScheduler>=3.10          # verified 3.11.3
+matplotlib>=3.8            # verified 3.11.1
+pandas>=2.2                # verified 3.0.5
+plyer>=2.1                 # verified 2.1.0
+PyQt5>=5.15.9              # verified 5.15.11

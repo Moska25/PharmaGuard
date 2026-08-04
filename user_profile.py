@@ -21,7 +21,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from auth_manager import AuthManager
+from auth_manager import AuthManager, generate_temporary_password
 from database import DatabaseManager
 from medication import Medication
 from dialogs import MedicalHistoryDialog
@@ -465,7 +465,7 @@ class UserProfileTab(QWidget):
         if not user_id:
             QMessageBox.warning(self, "No Selection", "Please select a user first.")
             return
-        new_password = "Patient123!"
+        new_password = generate_temporary_password()
         try:
             self.auth_manager.change_password(user_id, new_password)
         except ValueError as error:

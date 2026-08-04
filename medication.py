@@ -107,10 +107,17 @@ class Medication:
         )
 
     def normalized_medicine_time(self) -> str:
-        """Return time as HH:MM."""
+        """
+        Return time as HH:MM.
+
+        A bare hour is accepted from CSV import and manual entry. Both "8" and
+        "08" must become "08:00": leaving a single digit unpadded made
+        scheduled_datetime() raise ValueError on strptime, which took the whole
+        reminder list down.
+        """
         value = (self.medicine_time or "").strip()
-        if len(value) == 2 and value.isdigit():
-            return f"{value}:00"
+        if value.isdigit() and len(value) <= 2:
+            return f"{int(value):02d}:00"
         return value
 
     def is_taken(self) -> bool:

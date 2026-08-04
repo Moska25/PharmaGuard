@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="PharmaGuard logo">
+  <defs>
+    <linearGradient id="shield" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#14B8A6"/>
+      <stop offset="55%" stop-color="#0D9488"/>
+      <stop offset="100%" stop-color="#0369A1"/>
+    </linearGradient>
+    <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.22"/>
+      <stop offset="60%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Shield body -->
+  <path d="M256 32 L452 98 V266 C452 378 366 452 256 484 C146 452 60 378 60 266 V98 Z"
+        fill="url(#shield)"/>
+  <path d="M256 32 L452 98 V266 C452 378 366 452 256 484 C146 452 60 378 60 266 V98 Z"
+        fill="url(#gloss)"/>
+  <path d="M256 32 L452 98 V266 C452 378 366 452 256 484 C146 452 60 378 60 266 V98 Z"
+        fill="none" stroke="#0F766E" stroke-width="10" stroke-linejoin="round" opacity="0.55"/>
+
+  <!-- Capsule, angled across the shield -->
+  <g transform="rotate(-38 256 256)">
+    <rect x="150" y="212" width="212" height="94" rx="47" fill="#FFFFFF"/>
+    <path d="M256 212 H315 A47 47 0 0 1 315 306 H256 Z" fill="#BAE6FD"/>
+    <line x1="256" y1="212" x2="256" y2="306" stroke="#0F766E" stroke-width="7" opacity="0.35"/>
+  </g>
+
+  <!-- Cross mark, bottom right, marking the medical context -->
+  <g transform="translate(352 356)">
+    <circle r="52" fill="#0F172A" opacity="0.14"/>
+    <circle r="46" fill="#FFFFFF"/>
+    <rect x="-24" y="-8" width="48" height="16" rx="8" fill="#0D9488"/>
+    <rect x="-8" y="-24" width="16" height="48" rx="8" fill="#0D9488"/>
+  </g>
+</svg>

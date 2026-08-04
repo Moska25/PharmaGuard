@@ -1,5 +1,0 @@
-PyQt5
-APScheduler
-pandas
-matplotlib
-plyer

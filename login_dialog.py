@@ -17,7 +17,7 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
 )
 
-from auth_manager import AuthManager
+from auth_manager import DEMO_ADMIN_PASSWORD, DEMO_ADMIN_USERNAME, AuthManager
 from styles import current_app_style
 
 
@@ -113,10 +113,21 @@ class LoginDialog(QDialog):
         title.setAlignment(Qt.AlignCenter)
         layout.addWidget(title)
 
-        motto = QLabel("Billions must take medication!")
+        motto = QLabel("Never miss a dose.")
         motto.setObjectName("LoginMotto")
         motto.setAlignment(Qt.AlignCenter)
         layout.addWidget(motto)
+
+        if self.auth_manager.using_demo_admin:
+            demo_hint = QLabel(
+                f"Demo mode — admin login <b>{DEMO_ADMIN_USERNAME}</b> / "
+                f"<b>{DEMO_ADMIN_PASSWORD}</b><br>"
+                "Set PHARMAGUARD_ADMIN_PASSWORD to disable this notice."
+            )
+            demo_hint.setObjectName("LoginDemoHint")
+            demo_hint.setAlignment(Qt.AlignCenter)
+            demo_hint.setWordWrap(True)
+            layout.addWidget(demo_hint)
 
         login_group = QGroupBox("Sign In")
         login_group.setObjectName("LoginCard")
