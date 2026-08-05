@@ -74,6 +74,10 @@ class DashboardTab(QWidget):
         self.summary_layout = QGridLayout(self.summary_group)
         self.summary_layout.setHorizontalSpacing(12)
         self.summary_layout.setVerticalSpacing(12)
+        # Equal columns, so a short final row of tiles still lines up with the
+        # row above it instead of the last tile stretching to fill the gap.
+        for column in range(3):
+            self.summary_layout.setColumnStretch(column, 1)
         self.content_layout.addWidget(self.summary_group)
 
         self.main_sections_layout = QVBoxLayout()
@@ -125,15 +129,29 @@ class DashboardTab(QWidget):
         self.add_cards(cards)
 
         self.main_sections_layout.addWidget(
-            self.create_medication_list_group("Next 5 Upcoming Today", upcoming[:5], show_patient=True)
+            self.create_medication_list_group(
+                "Next 5 Upcoming Today",
+                upcoming[:5],
+                show_patient=True,
+                empty_text="Nothing further due today across all patients.",
+            )
         )
         self.main_sections_layout.addWidget(
-            self.create_medication_list_group("Missed Medications", missed[:5], show_patient=True)
+            self.create_medication_list_group(
+                "Missed Medications",
+                missed[:5],
+                show_patient=True,
+                empty_text="No missed doses today. Overdue doses appear here as soon as one passes its time.",
+            )
         )
         self.main_sections_layout.addWidget(self.create_admin_medical_summary_group(patients))
 
         if not all_medications:
-            self.main_sections_layout.addWidget(self.empty_message("No medication data has been added yet."))
+            self.main_sections_layout.addWidget(
+                self.empty_message(
+                    "No medications recorded yet. Use the Add Medication tab to schedule the first dose."
+                )
+            )
 
     def render_user_dashboard(self) -> None:
         """Render patient personal dashboard."""
@@ -161,29 +179,28 @@ class DashboardTab(QWidget):
         self.main_sections_layout.addWidget(self.create_checklist_group(medications))
 
     def add_cards(self, cards: List[tuple]) -> None:
-        """Add summary cards in a responsive grid."""
-        icons = ["+", "!", ">", "#", "%", "✓"]
+        """
+        Add metric tiles in a responsive grid.
+
+        The tiles used to carry a decorative "+ ! > # %" glyph cycled by index,
+        so the symbol had no relationship to the number beside it. A glyph that
+        means nothing is noise on a clinical readout, so the tile is now just
+        the legend and the figure.
+        """
         for index, (title, value) in enumerate(cards):
             card = QWidget()
             card.setObjectName("DashboardCard")
             layout = QVBoxLayout(card)
-            layout.setContentsMargins(16, 14, 16, 14)
-            layout.setSpacing(8)
+            layout.setContentsMargins(16, 14, 16, 16)
+            layout.setSpacing(6)
 
-            top_row = QHBoxLayout()
-            icon_label = QLabel(icons[index % len(icons)])
-            icon_label.setObjectName("CardIcon")
-            icon_label.setAlignment(Qt.AlignCenter)
-
-            title_label = QLabel(str(title))
+            title_label = QLabel(str(title).upper())
             title_label.setObjectName("CardTitle")
             value_label = QLabel(str(value))
             value_label.setObjectName("CardValue")
             value_label.setWordWrap(True)
 
-            top_row.addWidget(title_label, stretch=1)
-            top_row.addWidget(icon_label)
-            layout.addLayout(top_row)
+            layout.addWidget(title_label)
             layout.addWidget(value_label)
             self.summary_layout.addWidget(card, index // 3, index % 3)
 
@@ -205,7 +222,7 @@ class DashboardTab(QWidget):
         layout = QVBoxLayout(group)
 
         if medication is None:
-            layout.addWidget(self.empty_message("No upcoming medication for today."))
+            layout.addWidget(self.empty_message("Nothing further due today. Your next dose appears here once one is scheduled."))
             return group
 
         title = QLabel(f"{medication.medicine_name} - {medication.dosage}")
@@ -225,7 +242,7 @@ class DashboardTab(QWidget):
         layout = QVBoxLayout(group)
 
         if not patients:
-            layout.addWidget(self.empty_message("No patient users found."))
+            layout.addWidget(self.empty_message("No patient accounts yet. Create one from the User Profile tab."))
             return group
 
         row = QHBoxLayout()
@@ -256,7 +273,7 @@ class DashboardTab(QWidget):
         summary = self.database_manager.get_latest_medical_summary(int(patient_id)) if patient_id else {}
 
         if not summary:
-            layout.addWidget(self.empty_message("No medical history has been recorded."))
+            layout.addWidget(self.empty_message("No medical history recorded. Add a diagnosis for this patient from the User Profile tab."))
             return card
 
         rows = [
@@ -286,7 +303,7 @@ class DashboardTab(QWidget):
         layout = QVBoxLayout(group)
 
         if not medications:
-            layout.addWidget(self.empty_message("No medications scheduled for today."))
+            layout.addWidget(self.empty_message("No doses scheduled for today. Your administrator sets your schedule."))
             return group
 
         for medication in sorted(medications, key=lambda item: item.normalized_medicine_time()):
@@ -317,13 +334,14 @@ class DashboardTab(QWidget):
         title: str,
         medications: List[Medication],
         show_patient: bool = False,
+        empty_text: str = "Nothing to show here yet.",
     ) -> QGroupBox:
         """Create a simple dashboard medication list."""
         group = QGroupBox(title)
         layout = QVBoxLayout(group)
 
         if not medications:
-            layout.addWidget(self.empty_message("No records found."))
+            layout.addWidget(self.empty_message(empty_text))
             return group
 
         for medication in medications:
@@ -340,9 +358,9 @@ class DashboardTab(QWidget):
         return group
 
     def empty_message(self, text: str) -> QLabel:
-        """Create a muted empty-state label."""
+        """Create an empty-state label. The text must say what to do next."""
         label = QLabel(text)
-        label.setObjectName("MutedText")
+        label.setObjectName("EmptyState")
         label.setWordWrap(True)
         return label
 

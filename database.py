@@ -419,7 +419,9 @@ class DatabaseManager:
         with self._connection() as connection:
             rows = connection.execute(
                 f"""
-                SELECT *
+                SELECT
+                    id, first_name, last_name, username, password, role, is_active,
+                    DATETIME(created_at, 'localtime') AS created_at
                 FROM users
                 {where_sql}
                 ORDER BY first_name COLLATE NOCASE, last_name COLLATE NOCASE
@@ -554,7 +556,11 @@ class DatabaseManager:
         with self._connection() as connection:
             rows = connection.execute(
                 f"""
-                SELECT h.*, u.first_name, u.last_name, u.username
+                SELECT
+                    h.*,
+                    DATETIME(h.created_at, 'localtime') AS created_at,
+                    DATETIME(h.updated_at, 'localtime') AS updated_at,
+                    u.first_name, u.last_name, u.username
                 FROM patient_medical_history h
                 JOIN users u ON u.id = h.patient_id
                 {where_sql}
@@ -650,11 +656,19 @@ class DatabaseManager:
         if role and role != "All":
             conditions.append("actor_role = ?")
             values.append(role.lower())
+        # created_at is stored in UTC by CURRENT_TIMESTAMP, which is right for an
+        # audit trail, but the dates arriving from the Settings tab's date pickers
+        # are local. Comparing the two directly loses entries on any machine that
+        # is not on UTC: west of UTC a late-evening action carries tomorrow's UTC
+        # date and falls outside a filter ending on local today, and east of UTC
+        # the early hours carry yesterday's and fall outside one starting today.
+        # Either way the audit table rendered empty while rows existed. Convert at
+        # the boundary, in SQL, and leave storage in UTC where it belongs.
         if start_date:
-            conditions.append("DATE(created_at) >= ?")
+            conditions.append("DATE(created_at, 'localtime') >= ?")
             values.append(start_date)
         if end_date:
-            conditions.append("DATE(created_at) <= ?")
+            conditions.append("DATE(created_at, 'localtime') <= ?")
             values.append(end_date)
 
         search = search_text.strip()
@@ -666,7 +680,14 @@ class DatabaseManager:
         with self._connection() as connection:
             rows = connection.execute(
                 f"""
-                SELECT *
+                SELECT
+                    id,
+                    actor_user_id,
+                    actor_username,
+                    actor_role,
+                    action,
+                    details,
+                    DATETIME(created_at, 'localtime') AS created_at
                 FROM audit_log
                 {where_sql}
                 ORDER BY created_at DESC

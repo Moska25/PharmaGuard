@@ -24,7 +24,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from styles import current_app_style
+from styles import current_app_style, mono_font
 from user import User
 
 
@@ -93,7 +93,10 @@ class SettingsTab(QWidget):
             form.addRow("Default daily row limit", self.default_limit_combo)
             form.addRow("Auto logout minutes", self.auto_logout_combo)
         layout.addWidget(settings_group)
-        layout.addWidget(self.restore_button)
+        restore_row = QHBoxLayout()
+        restore_row.addStretch()
+        restore_row.addWidget(self.restore_button)
+        layout.addLayout(restore_row)
 
         self.theme_combo.currentTextChanged.connect(lambda: self.save_setting("theme", self.theme_combo.currentText()))
         self.sound_combo.currentTextChanged.connect(lambda: self.save_setting("notification_sounds", self.sound_combo.currentText()))
@@ -137,6 +140,14 @@ class SettingsTab(QWidget):
         filter_row.addWidget(self.audit_end_date, 1, 3)
         filter_row.addWidget(self.export_button, 1, 4)
         group_layout.addLayout(filter_row)
+
+        self.audit_empty_label = QLabel(
+            "No audit entries match these filters. Widen the date range or clear the search."
+        )
+        self.audit_empty_label.setObjectName("EmptyState")
+        self.audit_empty_label.setWordWrap(True)
+        self.audit_empty_label.hide()
+        group_layout.addWidget(self.audit_empty_label)
 
         self.audit_table = QTableWidget()
         self.audit_table.setColumnCount(len(self.AUDIT_HEADERS))
@@ -215,8 +226,14 @@ class SettingsTab(QWidget):
             for column_index, value in enumerate(values):
                 item = QTableWidgetItem(str(value))
                 item.setToolTip(str(value))
+                if column_index == 0:
+                    item.setFont(mono_font())
                 self.audit_table.setItem(row_index, column_index, item)
         self.audit_table.resizeColumnsToContents()
+
+        # An empty grid reads as a broken panel; say which filter to widen.
+        self.audit_empty_label.setVisible(not logs)
+        self.audit_table.setVisible(bool(logs))
 
     def export_audit_csv(self) -> None:
         path, _ = QFileDialog.getSaveFileName(self, "Export Audit Log", "audit_log.csv", "CSV Files (*.csv)")

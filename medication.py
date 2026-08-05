@@ -21,6 +21,24 @@ MEDICATION_SORT_OPTIONS = [
 ]
 
 
+def format_duration(minutes: int) -> str:
+    """
+    Render a span of minutes the way a person would say it.
+
+    Hours used to run unbounded, so a dose missed three weeks ago reported
+    "Overdue by 516h 7m" in the daily view and in the reminder popup - a number
+    nobody can read as three weeks. Past a day, days lead and minutes are noise.
+    """
+    minutes = max(0, int(minutes))
+    if minutes < 60:
+        return f"{minutes}m"
+    hours, remaining_minutes = divmod(minutes, 60)
+    if hours < 24:
+        return f"{hours}h {remaining_minutes}m"
+    days, remaining_hours = divmod(hours, 24)
+    return f"{days}d {remaining_hours}h"
+
+
 @dataclass
 class Medication:
     """One medication reminder record."""
@@ -146,13 +164,9 @@ class Medication:
             return "Taken"
 
         minutes = self.minutes_until(reference_time)
-        absolute_minutes = abs(minutes)
-        hours = absolute_minutes // 60
-        mins = absolute_minutes % 60
-
         if minutes < 0:
-            return f"Overdue by {hours}h {mins}m"
-        return f"{hours}h {mins}m remaining"
+            return f"Overdue by {format_duration(-minutes)}"
+        return f"{format_duration(minutes)} remaining"
 
     def ten_minutes_before_datetime(self) -> datetime:
         """Return the reminder time for the 10-minute warning."""

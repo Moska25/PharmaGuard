@@ -88,7 +88,15 @@ def seed(database_manager: DatabaseManager, *, days_back: int = 21, seed_value: 
                     status = Medication.TAKEN if generator.random() < 0.85 else Medication.NOT_TAKEN
                 elif offset == 0:
                     scheduled = datetime.strptime(f"{day} {time_text}", "%Y-%m-%d %H:%M")
-                    status = Medication.TAKEN if scheduled < datetime.now() else Medication.NOT_TAKEN
+                    if scheduled >= datetime.now():
+                        status = Medication.NOT_TAKEN
+                    else:
+                        # Today's past doses used to be marked Taken without
+                        # exception, so a database seeded at any hour showed a
+                        # clinic with zero missed doses - and the screenshots of
+                        # an adherence tracker carried no evidence that it tracks
+                        # adherence. Today follows the same ~85% rate as history.
+                        status = Medication.TAKEN if generator.random() < 0.85 else Medication.NOT_TAKEN
                 else:
                     status = Medication.NOT_TAKEN
 

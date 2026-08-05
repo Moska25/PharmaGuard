@@ -14,6 +14,7 @@ from PyQt5.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -23,8 +24,23 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
 )
 
-from medication import Medication
-from styles import current_app_style
+from medication import Medication, format_duration
+from styles import DUE, OVERDUE, current_app_style, mono_font
+
+# The medication field labels, in one place so the Add Medication tab in ui.py
+# and the Edit dialog here cannot drift apart. Five of these were bilingual and
+# two were English-only, which reads as an unfinished translation rather than a
+# choice; the users are a Georgian clinic, so the set is completed rather than
+# stripped. (label, attribute name on EditMedicationDialog)
+FIELD_LABELS = [
+    ("Patient / პაციენტი", "patient_input"),
+    ("Medicine / წამალი", "medicine_combo"),
+    ("Dosage / დოზა", "dosage_input"),
+    ("Date / თარიღი", "date_edit"),
+    ("Time / დრო", "time_input"),
+    ("Taking rule / მიღების წესი", "rule_combo"),
+    ("Status / სტატუსი", "status_combo"),
+]
 
 
 class EditMedicationDialog(QDialog):
@@ -69,20 +85,22 @@ class EditMedicationDialog(QDialog):
         self.status_combo.addItems([Medication.NOT_TAKEN, Medication.TAKEN])
 
         self.category_label = QLabel("Category: -")
+        self.category_label.setObjectName("MutedText")
+        # The warning is the clinically load-bearing line here. It used to render
+        # in the same plain body text as the category, so "Do not exceed 8 puffs
+        # daily" carried exactly as much weight as "Bronchodilator".
         self.warning_label = QLabel("Warning: -")
+        self.warning_label.setObjectName("WarningText")
         self.warning_label.setWordWrap(True)
 
-        form.addRow("Patient / პაციენტი", self.patient_input)
-        form.addRow("Medicine / წამალი", self.medicine_combo)
-        form.addRow("Dosage / დოზა", self.dosage_input)
-        form.addRow("Date / თარიღი", self.date_edit)
-        form.addRow("Time / დრო", self.time_input)
-        form.addRow("Taking rule", self.rule_combo)
-        form.addRow("Status", self.status_combo)
+        for label, widget in FIELD_LABELS:
+            form.addRow(label, getattr(self, widget))
         form.addRow(self.category_label)
         form.addRow(self.warning_label)
 
         self.buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        self.buttons.button(QDialogButtonBox.Save).setObjectName("PrimaryButton")
+        self.buttons.button(QDialogButtonBox.Save).setDefault(True)
         layout.addLayout(form)
         layout.addWidget(self.buttons)
 
@@ -106,11 +124,11 @@ class EditMedicationDialog(QDialog):
         info = self.medicine_info.get(medicine_name.strip().lower())
         if not info:
             self.category_label.setText(f"Category: {self.medication.category or '-'}")
-            self.warning_label.setText(f"Warning: {self.medication.warning or '-'}")
+            self.warning_label.setText(self.medication.warning or "No specific warning recorded.")
             return
 
         self.category_label.setText(f"Category: {info['category']}")
-        self.warning_label.setText(f"Warning: {info['warning']}")
+        self.warning_label.setText(info["warning"] or "No specific warning recorded.")
         self.rule_combo.setCurrentText(info["default_rule"])
 
     def category_text(self) -> str:
@@ -118,8 +136,8 @@ class EditMedicationDialog(QDialog):
         return "" if text == "-" else text
 
     def warning_text(self) -> str:
-        text = self.warning_label.text().replace("Warning:", "", 1).strip()
-        return "" if text == "-" else text
+        text = self.warning_label.text().strip()
+        return "" if text in ("-", "No specific warning recorded.") else text
 
     def get_medication(self) -> Medication:
         """Return the edited Medication object."""
@@ -159,6 +177,8 @@ class CopyDayDialog(QDialog):
         layout.addWidget(self.target_date_edit)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.button(QDialogButtonBox.Ok).setObjectName("PrimaryButton")
+        buttons.button(QDialogButtonBox.Ok).setDefault(True)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -207,6 +227,8 @@ class MedicalHistoryDialog(QDialog):
             self.inputs[key] = text_edit
 
         self.buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        self.buttons.button(QDialogButtonBox.Save).setObjectName("PrimaryButton")
+        self.buttons.button(QDialogButtonBox.Save).setDefault(True)
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
 
@@ -247,29 +269,54 @@ class ReminderDialog(QDialog):
         self._build_ui(title)
         self._apply_styles()
 
+    # Each scheduler event gets its own headline and signal colour, so a missed
+    # dose never looks like a ten-minute heads-up. The word carries the meaning
+    # as well as the colour, because the colour alone is not readable by
+    # everyone and does not survive a greyscale screenshot.
+    EVENT_BANNERS = {
+        "ten_minutes": ("Due in 10 minutes", DUE),
+        "exact_time": ("Due now", DUE),
+        "missed": ("Missed", OVERDUE),
+    }
+
     def _build_ui(self, title: str) -> None:
         layout = QVBoxLayout(self)
+        layout.setSpacing(12)
 
-        title_label = QLabel(title)
-        title_label.setObjectName("ReminderTitle")
-        title_label.setWordWrap(True)
-        layout.addWidget(title_label)
+        headline, kind = self.EVENT_BANNERS.get(self.event_type, (title, DUE))
+        banner = QLabel(self._banner_text(headline))
+        banner.setObjectName("ReminderBanner")
+        # Read back by the stylesheet as QLabel#ReminderBanner[kind="..."].
+        banner.setProperty("kind", kind)
+        banner.setWordWrap(True)
+        layout.addWidget(banner)
 
-        details = QTextEdit()
-        details.setReadOnly(True)
-        details.setMinimumHeight(190)
-        details.setText(self._details_text())
-        layout.addWidget(details)
+        # What the patient actually acts on, at the size that says so.
+        medicine = QLabel(f"{self.medication.medicine_name} {self.medication.dosage}".strip())
+        medicine.setObjectName("ReminderMedicine")
+        medicine.setWordWrap(True)
+        layout.addWidget(medicine)
+
+        time_label = QLabel(self.medication.normalized_medicine_time())
+        time_label.setObjectName("ReminderTime")
+        layout.addWidget(time_label)
+
+        layout.addLayout(self._detail_grid())
 
         warning = self.medication.warning_message()
         if warning:
-            warning_label = QLabel(f"Warning: {warning}")
+            warning_label = QLabel(warning)
             warning_label.setObjectName("WarningText")
             warning_label.setWordWrap(True)
             layout.addWidget(warning_label)
 
+        layout.addStretch()
+
         button_row = QHBoxLayout()
         self.mark_taken_button = QPushButton("Mark As Taken")
+        # The one action this popup exists to offer. Everything else is quiet.
+        self.mark_taken_button.setObjectName("PrimaryButton")
+        self.mark_taken_button.setDefault(True)
         self.mute_button = QPushButton("Mute Sound")
         self.close_button = QPushButton("Close")
 
@@ -277,31 +324,41 @@ class ReminderDialog(QDialog):
         self.mute_button.clicked.connect(self.notification_manager.stop_current_sound)
         self.close_button.clicked.connect(self.close)
 
-        button_row.addWidget(self.mark_taken_button)
+        button_row.addWidget(self.mark_taken_button, stretch=1)
         button_row.addWidget(self.mute_button)
         button_row.addWidget(self.close_button)
         layout.addLayout(button_row)
 
-    def _details_text(self) -> str:
-        """Build reminder details for the popup body."""
-        lines = [
-            f"Patient: {self.medication.patient_name}",
-            f"Medicine: {self.medication.medicine_name}",
-            f"Dosage: {self.medication.dosage}",
-            f"Date: {self.medication.medication_date}",
-            f"Time: {self.medication.normalized_medicine_time()}",
-            f"Taking rule: {self.medication.taking_rule}",
-            f"Status: {self.medication.status}",
-            f"Category: {self.medication.category or '-'}",
+    def _banner_text(self, headline: str) -> str:
+        """Headline plus, for a missed dose, how late it now is."""
+        if self.event_type != "missed":
+            return headline
+        return f"{headline} by {format_duration(self.medication.minutes_late())}"
+
+    def _detail_grid(self) -> QGridLayout:
+        """Secondary fields as legend-over-value pairs rather than a text dump."""
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(24)
+        grid.setVerticalSpacing(6)
+
+        fields = [
+            ("PATIENT", self.medication.patient_name),
+            ("DATE", self.medication.medication_date),
+            ("TAKING RULE", self.medication.taking_rule),
+            ("CATEGORY", self.medication.category or "-"),
         ]
-
-        if self.event_type == "missed":
-            minutes_late = self.medication.minutes_late()
-            hours = minutes_late // 60
-            minutes = minutes_late % 60
-            lines.append(f"How late: {hours}h {minutes}m")
-
-        return "\n".join(lines)
+        for index, (legend, value) in enumerate(fields):
+            legend_label = QLabel(legend)
+            legend_label.setObjectName("CardTitle")
+            value_label = QLabel(str(value))
+            value_label.setWordWrap(True)
+            if legend == "DATE":
+                value_label.setFont(mono_font())
+            grid.addWidget(legend_label, (index // 2) * 2, index % 2)
+            grid.addWidget(value_label, (index // 2) * 2 + 1, index % 2)
+        grid.setColumnStretch(0, 1)
+        grid.setColumnStretch(1, 1)
+        return grid
 
     def _apply_styles(self) -> None:
         self.setStyleSheet(current_app_style())

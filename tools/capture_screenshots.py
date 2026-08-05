@@ -15,6 +15,7 @@ import argparse
 import shutil
 import sys
 import tempfile
+from datetime import date
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -88,15 +89,6 @@ def main() -> int:
             window.tabs.setCurrentIndex(index)
             QApplication.processEvents()
             label = window.tabs.tabText(index)
-            # The statistics tab opens with nothing selected, which would
-            # screenshot as a set of empty charts. Put it in a state that
-            # actually shows the demo data.
-            if label == "Statistics":
-                tab = window.statistics_tab
-                tab.date_range_combo.setCurrentText(tab.RANGE_MONTH)
-                tab.patient_selector.all_patients_checkbox.setChecked(True)
-                tab.update_statistics()
-                QApplication.processEvents()
             slug = (
                 label.lower()
                 .replace(" / ", "-")
@@ -105,12 +97,69 @@ def main() -> int:
             )
             capture(window, slug, suffix=suffix)
 
+        capture_dialogs(database, suffix)
+
         window.close()
         login.close()
     finally:
         shutil.rmtree(workspace, ignore_errors=True)
 
     return 0
+
+
+def capture_dialogs(database: DatabaseManager, suffix: str) -> None:
+    """
+    Capture the modal surfaces, which walking the tab bar never reaches.
+
+    The reminder popup is the single most demo-able moment in the app - it is
+    what the whole scheduler exists to produce - and it appeared in no
+    screenshot at all until this was added.
+    """
+    from dialogs import CopyDayDialog, EditMedicationDialog, ReminderDialog  # noqa: E402
+    from notification_manager import NotificationManager  # noqa: E402
+    from scheduler import ReminderScheduler  # noqa: E402
+
+    notifications = NotificationManager()
+    # Nothing should play a sound or raise an OS notification during a capture.
+    notifications.apply_settings(sounds_enabled=False, desktop_enabled=False, volume=0)
+
+    # Today's doses, not the whole history. load_all_medications is ordered by
+    # date ascending, so taking the first overdue row picked one from the far
+    # end of the seeded 21-day window and the popup read "Missed by 21d 3h".
+    today = date.today().isoformat()
+    todays_doses = database.load_medications_by_date(today)
+    overdue = next((item for item in todays_doses if item.is_overdue()), todays_doses[0])
+    upcoming = next(
+        (item for item in todays_doses if not item.is_overdue() and not item.is_taken()),
+        todays_doses[-1],
+    )
+
+    dialogs = {
+        # Missed is the more informative of the three states to show: it is the
+        # only one that reports how late the dose now is.
+        "reminder-missed": ReminderDialog(
+            title="Missed Medication Deadline",
+            medication=overdue,
+            notification_manager=notifications,
+            mark_taken_callback=lambda _id: None,
+            event_type=ReminderScheduler.EVENT_MISSED,
+        ),
+        "reminder-due": ReminderDialog(
+            title="Medication Reminder - 10 Minutes Left",
+            medication=upcoming,
+            notification_manager=notifications,
+            mark_taken_callback=lambda _id: None,
+            event_type=ReminderScheduler.EVENT_TEN_MINUTES,
+        ),
+        "edit-medication": EditMedicationDialog(upcoming, {}),
+        "copy-day": CopyDayDialog(upcoming.medication_date),
+    }
+    for name, dialog in dialogs.items():
+        dialog.setStyleSheet(styles.current_app_style())
+        dialog.adjustSize()
+        QApplication.processEvents()
+        capture(dialog, name, suffix=suffix)
+        dialog.close()
 
 
 if __name__ == "__main__":

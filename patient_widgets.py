@@ -136,8 +136,12 @@ class PatientMultiSelectWidget(QWidget):
         self.add_patient_button = QPushButton("Add Patient")
         self.add_patient_button.setToolTip("Add the selected patient to the statistics filter.")
 
+        # The checkbox label and "Find Patient" ran together as
+        # "All PatientsFind Patient" with no gap between them.
+        top_row.setSpacing(12)
         top_row.addWidget(self.all_patients_checkbox)
-        top_row.addWidget(QLabel("Find Patient"))
+        top_row.addSpacing(8)
+        top_row.addWidget(QLabel("Find patient"))
         top_row.addWidget(self.patient_combo, stretch=1)
         top_row.addWidget(self.add_patient_button)
         layout.addLayout(top_row)

@@ -5,7 +5,8 @@ Everything here runs against a throwaway SQLite file, so the suite never touches
 a real installation and never needs a committed database.
 """
 
-from datetime import date, timedelta
+import sqlite3
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
@@ -284,3 +285,84 @@ class TestSettingsAndAudit:
         logs = database.get_audit_logs()
         assert len(logs) == 1
         assert logs[0]["action"] == "Login success"
+
+
+class TestAuditLogTimezone:
+    """
+    created_at is stored in UTC; every date the UI filters by is local.
+
+    Anywhere off UTC that gap swallows entries. West of UTC an action taken at
+    21:00 local carries tomorrow's UTC date, so an audit search ending "today"
+    returned nothing; east of UTC the same happens to the early hours against a
+    search starting "today". An audit trail that hides entries without saying
+    so is worse than no audit trail, hence the explicit cover.
+    """
+
+    @staticmethod
+    def _write_at(database, utc_timestamp: str) -> None:
+        """Insert one entry with a chosen UTC created_at, bypassing the default."""
+        with sqlite3.connect(database.db_path) as connection:
+            connection.execute(
+                """
+                INSERT INTO audit_log (actor_username, actor_role, action, details, created_at)
+                VALUES ('nabashidze0001', 'user', 'Login success', 'probe', ?)
+                """,
+                (utc_timestamp,),
+            )
+
+    def test_an_entry_whose_utc_date_differs_from_its_local_date_is_still_found(self, database):
+        """
+        The regression itself, pinned deterministically.
+
+        Using the live clock would only catch the bug during the hours when the
+        two dates happen to disagree, so the timestamp is chosen from the
+        machine's own offset to guarantee they disagree.
+        """
+        offset = datetime.now().astimezone().utcoffset()
+        if offset == timedelta(0):
+            pytest.skip("machine runs on UTC, so no local/UTC date gap exists to test")
+
+        # Pick the local time that is guaranteed to land on a different UTC date
+        # for this machine's offset. West of UTC (offset < 0) local runs behind,
+        # so a late evening maps to the next UTC day. East of UTC it runs ahead,
+        # so an early morning maps to the previous one. Either way the naive
+        # comparison this replaced put the entry outside a single-day range.
+        local_day = date(2026, 8, 4)
+        local_moment = (
+            datetime(2026, 8, 4, 0, 30) if offset > timedelta(0) else datetime(2026, 8, 4, 23, 30)
+        )
+        utc_moment = local_moment - offset
+        assert utc_moment.date() != local_day, "timestamp must straddle the date boundary"
+        self._write_at(database, utc_moment.strftime("%Y-%m-%d %H:%M:%S"))
+
+        found = database.get_audit_logs(
+            start_date=local_day.isoformat(),
+            end_date=local_day.isoformat(),
+        )
+        assert len(found) == 1, (
+            f"entry at {local_moment} local (stored {utc_moment} UTC) must fall inside "
+            f"a filter for {local_day}"
+        )
+
+    def test_a_stored_utc_timestamp_is_returned_as_local_time(self, database):
+        self._write_at(database, "2026-08-04 22:30:00")
+        entry = database.get_audit_logs()[0]
+        expected = datetime(2026, 8, 4, 22, 30, tzinfo=timezone.utc).astimezone()
+        assert entry["created_at"] == expected.strftime("%Y-%m-%d %H:%M:%S")
+
+    def test_an_entry_outside_the_range_is_still_excluded(self, database):
+        self._write_at(database, "2020-01-01 12:00:00")
+        assert database.get_audit_logs(start_date="2026-01-01", end_date="2026-12-31") == []
+
+    def test_created_date_on_a_user_is_reported_in_local_time(self, database):
+        database.create_user("Nino", "Abashidze", "hash")
+        stored = sqlite3.connect(database.db_path).execute(
+            "SELECT created_at FROM users"
+        ).fetchone()[0]
+        listed = database.list_users()[0].created_at
+        expected = (
+            datetime.strptime(stored, "%Y-%m-%d %H:%M:%S")
+            .replace(tzinfo=timezone.utc)
+            .astimezone()
+        )
+        assert listed == expected.strftime("%Y-%m-%d %H:%M:%S")

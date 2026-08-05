@@ -33,7 +33,7 @@ from matplotlib.figure import Figure
 from database import DatabaseManager
 from medication import MEDICATION_SORT_OPTIONS, Medication, sort_medications
 from patient_widgets import PatientMultiSelectWidget
-from styles import current_app_style, current_theme
+from styles import current_app_style, tokens
 from user import User
 
 
@@ -55,6 +55,9 @@ class StatisticsWindow(QWidget):
         self.current_user = current_user
         self.selected_date = QDate.currentDate().toString("yyyy-MM-dd")
         self._build_ui()
+        # Defaults before the signal wiring, so construction does not fire a
+        # refresh against a selector that has no patients loaded yet.
+        self._apply_default_view()
         self._connect_events()
         self.update_date_edit_visibility()
 
@@ -224,12 +227,25 @@ class StatisticsWindow(QWidget):
         container_layout.addWidget(title_label)
 
         figure = Figure(figsize=(4.8, 2.6), dpi=100)
-        figure.patch.set_facecolor("#1E293B" if current_theme() == "Dark Theme" else "#ffffff")
+        figure.patch.set_facecolor(tokens()["panel"])
         canvas = FigureCanvas(figure)
         canvas.setMinimumHeight(230)
         container_layout.addWidget(canvas)
         layout.addWidget(container, row, column, row_span, column_span)
         return canvas
+
+    def _apply_default_view(self) -> None:
+        """
+        Open on All Patients over This Month rather than on an empty tab.
+
+        The tab used to land on Today with nothing selected, so the first thing
+        anyone saw was five zeros, two blank charts and an instruction to go and
+        pick a filter. `tools/capture_screenshots.py` had to set this state by
+        hand before it could take a usable screenshot, which is a good sign the
+        default was wrong rather than the screenshot.
+        """
+        self.date_range_combo.setCurrentText(self.RANGE_MONTH)
+        self.patient_selector.all_patients_checkbox.setChecked(True)
 
     def _connect_events(self) -> None:
         self.date_range_combo.currentTextChanged.connect(self.on_date_range_changed)
@@ -380,16 +396,22 @@ class StatisticsWindow(QWidget):
         taken = sum(1 for item in medications if item.status == Medication.TAKEN)
         not_taken = sum(1 for item in medications if item.status == Medication.NOT_TAKEN)
 
-        self.draw_pie_chart(self.taken_canvas, ["Taken", "Not Taken"], [taken, not_taken], ["#45a77a", "#d95f5f"])
+        palette = tokens()
+        self.draw_pie_chart(
+            self.taken_canvas,
+            ["Taken", "Not Taken"],
+            [taken, not_taken],
+            [palette["signal_taken"], palette["signal_overdue"]],
+        )
         self.draw_daily_count_chart(self.daily_canvas, medications)
 
     def draw_pie_chart(self, canvas: FigureCanvas, labels: List[str], values: List[int], colors: List[str]) -> None:
         figure = canvas.figure
         figure.clear()
-        dark = current_theme() == "Dark Theme"
-        figure.patch.set_facecolor("#1E293B" if dark else "#ffffff")
+        palette = tokens()
+        figure.patch.set_facecolor(palette["panel"])
         axis = figure.add_subplot(111)
-        axis.set_facecolor("#1E293B" if dark else "#ffffff")
+        axis.set_facecolor(palette["panel"])
         if sum(values) == 0:
             axis.text(
                 0.5,
@@ -398,7 +420,7 @@ class StatisticsWindow(QWidget):
                 ha="center",
                 va="center",
                 fontsize=11,
-                color="#CBD5E1" if dark else "#334155",
+                color=palette["muted"],
             )
             axis.set_axis_off()
         else:
@@ -408,7 +430,7 @@ class StatisticsWindow(QWidget):
                 autopct="%1.0f%%",
                 startangle=90,
                 colors=colors,
-                textprops={"fontsize": 9, "color": "#F8FAFC" if dark else "#1f3347"},
+                textprops={"fontsize": 9, "color": palette["text"]},
             )
             axis.axis("equal")
         figure.tight_layout()
@@ -417,10 +439,10 @@ class StatisticsWindow(QWidget):
     def draw_daily_count_chart(self, canvas: FigureCanvas, medications: List[Medication]) -> None:
         figure = canvas.figure
         figure.clear()
-        dark = current_theme() == "Dark Theme"
-        figure.patch.set_facecolor("#1E293B" if dark else "#ffffff")
+        palette = tokens()
+        figure.patch.set_facecolor(palette["panel"])
         axis = figure.add_subplot(111)
-        axis.set_facecolor("#1E293B" if dark else "#ffffff")
+        axis.set_facecolor(palette["panel"])
         counts = Counter(item.medication_date for item in medications)
 
         if not counts:
@@ -431,19 +453,19 @@ class StatisticsWindow(QWidget):
                 ha="center",
                 va="center",
                 fontsize=11,
-                color="#CBD5E1" if dark else "#334155",
+                color=palette["muted"],
             )
             axis.set_axis_off()
         else:
             dates = sorted(counts)
             values = [counts[item] for item in dates]
-            axis.bar(dates, values, color="#3B82F6")
-            axis.tick_params(axis="x", rotation=30, labelsize=8, colors="#CBD5E1" if dark else "#334155")
-            axis.tick_params(axis="y", labelsize=8, colors="#CBD5E1" if dark else "#334155")
+            axis.bar(dates, values, color=palette["accent"])
+            axis.tick_params(axis="x", rotation=30, labelsize=8, colors=palette["muted"])
+            axis.tick_params(axis="y", labelsize=8, colors=palette["muted"])
             axis.set_ylabel("Count")
-            axis.yaxis.label.set_color("#CBD5E1" if dark else "#334155")
+            axis.yaxis.label.set_color(palette["muted"])
             for spine in axis.spines.values():
-                spine.set_color("#334155" if dark else "#d8e1ea")
+                spine.set_color(palette["border"])
 
         figure.tight_layout()
         canvas.draw()

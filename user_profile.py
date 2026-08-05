@@ -2,6 +2,7 @@
 User Profile tab for PharmaGuard.
 """
 
+from PyQt5.QtGui import QColor
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QAbstractItemView,
@@ -27,7 +28,7 @@ from medication import Medication
 from dialogs import MedicalHistoryDialog
 from login_dialog import CreateUserDialog
 from patient_widgets import SearchablePatientComboBox
-from styles import current_app_style
+from styles import OVERDUE, TAKEN, current_app_style, mono_font, signal_color
 from user import User
 
 
@@ -117,7 +118,6 @@ class UserProfileTab(QWidget):
         self.reset_password_button = QPushButton("Reset User Password")
         self.reset_password_button.clicked.connect(self.reset_selected_user_password)
         self.activate_user_button = QPushButton("Activate User")
-        self.activate_user_button.setObjectName("SuccessButton")
         self.activate_user_button.clicked.connect(lambda: self.set_selected_user_active(True))
         self.deactivate_user_button = QPushButton("Deactivate User")
         self.deactivate_user_button.setObjectName("DangerButton")
@@ -135,6 +135,9 @@ class UserProfileTab(QWidget):
         list_layout.addLayout(search_row)
 
         self.users_table = QTableWidget()
+        # Without this the table sizes to about two rows, so a five-patient
+        # clinic reads as a scrollbar rather than as a list.
+        self.users_table.setMinimumHeight(260)
         self.users_table.setColumnCount(6)
         self.users_table.setHorizontalHeaderLabels(["ID", "Full Name", "Username", "Role", "Status", "Created Date"])
         self.users_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -216,6 +219,7 @@ class UserProfileTab(QWidget):
             layout.addWidget(note)
 
         self.medical_history_table = QTableWidget()
+        self.medical_history_table.setMinimumHeight(220)
         self.medical_history_table.setColumnCount(len(self.HISTORY_HEADERS))
         self.medical_history_table.setHorizontalHeaderLabels(self.HISTORY_HEADERS)
         self.medical_history_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -315,8 +319,17 @@ class UserProfileTab(QWidget):
                 item = QTableWidgetItem(str(value))
                 if column_index in [0, 3, 4]:
                     item.setTextAlignment(Qt.AlignCenter)
+                # Id and Created Date are figures; they belong in the same
+                # tabular font as every other number in the app.
+                if column_index in (0, 5):
+                    item.setFont(mono_font())
                 if column_index == 4:
-                    item.setForeground(Qt.darkGreen if user.is_active else Qt.red)
+                    # Qt.darkGreen and Qt.red are stock Qt colours that sit
+                    # outside the palette; use the app's own signal tokens so
+                    # "Active" is the same green as a taken dose.
+                    item.setForeground(
+                        QColor(signal_color(TAKEN if user.is_active else OVERDUE))
+                    )
                 self.users_table.setItem(row_index, column_index, item)
         self.users_table.resizeColumnsToContents()
         if selected_user_id is not None and self.users_table.rowCount() > 0:

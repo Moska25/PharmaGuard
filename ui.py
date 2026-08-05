@@ -35,6 +35,7 @@ from PyQt5.QtWidgets import (
     QSplitter,
     QTableWidget,
     QTableWidgetItem,
+    QToolButton,
     QTabWidget,
     QTimeEdit,
     QVBoxLayout,
@@ -52,7 +53,18 @@ from patient_widgets import SearchablePatientComboBox
 from scheduler import ReminderScheduler
 from settings_tab import SettingsTab
 from statistics_window import StatisticsWindow
-from styles import app_style, current_theme, set_app_theme
+from styles import (
+    OVERDUE,
+    TAKEN,
+    DUE,
+    StatusEdgeDelegate,
+    app_style,
+    current_theme,
+    mono_font,
+    row_tint,
+    set_app_theme,
+    tokens,
+)
 from user import User
 from user_profile import UserProfileTab
 
@@ -77,6 +89,9 @@ class MainWindow(QMainWindow):
         "Warning",
         "Remaining",
     ]
+
+    # Columns rendered in tabular figures: id, dosage, date, time, countdown.
+    MONO_COLUMNS = {0, 3, 4, 5, 10}
 
     def __init__(self, database_manager: DatabaseManager, auth_manager: AuthManager, current_user: User) -> None:
         super().__init__()
@@ -320,7 +335,10 @@ class MainWindow(QMainWindow):
         self.status_combo.addItems([Medication.NOT_TAKEN, Medication.TAKEN])
 
         self.category_label = QLabel("Category: -")
+        self.category_label.setObjectName("MutedText")
         self.warning_label = QLabel("Warning: -")
+        self.warning_label.setObjectName("WarningText")
+        self.warning_label.setWordWrap(True)
         self.warning_label.setWordWrap(True)
         self.patient_medical_warning_label = QLabel("")
         self.patient_medical_warning_label.setObjectName("MedicalWarning")
@@ -338,10 +356,10 @@ class MainWindow(QMainWindow):
         form_layout.addWidget(self.date_edit, 1, 1)
         form_layout.addWidget(QLabel("Time / დრო"), 1, 2)
         form_layout.addWidget(self.time_input, 1, 3)
-        form_layout.addWidget(QLabel("Taking Rule"), 1, 4)
+        form_layout.addWidget(QLabel("Taking rule / მიღების წესი"), 1, 4)
         form_layout.addWidget(self.rule_combo, 1, 5)
 
-        form_layout.addWidget(QLabel("Status"), 2, 0)
+        form_layout.addWidget(QLabel("Status / სტატუსი"), 2, 0)
         form_layout.addWidget(self.status_combo, 2, 1)
         form_layout.addWidget(self.category_label, 3, 0, 1, 3)
         form_layout.addWidget(self.warning_label, 3, 3, 1, 3)
@@ -424,6 +442,22 @@ class MainWindow(QMainWindow):
         self.calendar = QCalendarWidget()
         self.calendar.setGridVisible(True)
         self.calendar.setSelectedDate(self.selected_date)
+        self.calendar.setVerticalHeaderFormat(QCalendarWidget.NoVerticalHeader)
+        # Qt paints Saturday and Sunday red by default. In this app red already
+        # means a missed dose, so a red weekend column is the same signal
+        # saying something else. Weekends are muted like every other weekday.
+        weekend_format = QTextCharFormat()
+        weekend_format.setForeground(QBrush(QColor(tokens()["muted"])))
+        for weekend_day in (Qt.Saturday, Qt.Sunday):
+            self.calendar.setWeekdayTextFormat(weekend_day, weekend_format)
+        # Qt ships the month arrows as green circle icons. Green means "taken"
+        # here, so a green arrow is the app's own signal saying something else.
+        # Text chevrons inherit the stylesheet and carry no colour of their own.
+        for child_name, glyph in (("qt_calendar_prevmonth", "‹"), ("qt_calendar_nextmonth", "›")):
+            nav_button = self.calendar.findChild(QToolButton, child_name)
+            if nav_button is not None:
+                nav_button.setIcon(QIcon())
+                nav_button.setText(glyph)
         left_layout.addWidget(self.calendar)
 
         search_group = QGroupBox("Search")
@@ -518,6 +552,8 @@ class MainWindow(QMainWindow):
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
         self.table.setAlternatingRowColors(True)
+        self.table.setShowGrid(False)
+        self.table.setItemDelegate(StatusEdgeDelegate(self.table))
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
 
@@ -803,14 +839,12 @@ class MainWindow(QMainWindow):
                 self.calendar.setDateTextFormat(date_value, QTextCharFormat())
 
         self.highlighted_dates = self.database_manager.get_dates_with_medications(self.daily_filter_patient_id())
+        # One accent for the whole app: a day carrying doses reads teal, not blue.
+        palette = tokens()
         highlight_format = QTextCharFormat()
-        if current_theme() == "Dark Theme":
-            highlight_format.setBackground(QBrush(QColor("#1D4ED8")))
-            highlight_format.setForeground(QBrush(QColor("#F8FAFC")))
-        else:
-            highlight_format.setBackground(QBrush(QColor("#d8ecff")))
-            highlight_format.setForeground(QBrush(QColor("#0f4f86")))
-        highlight_format.setFontWeight(700)
+        highlight_format.setBackground(QBrush(QColor(palette["selection"])))
+        highlight_format.setForeground(QBrush(QColor(palette["on_selection"])))
+        highlight_format.setFontWeight(600)
 
         for date_text in self.highlighted_dates:
             date_value = QDate.fromString(date_text, "yyyy-MM-dd")
@@ -842,14 +876,21 @@ class MainWindow(QMainWindow):
                 medication.remaining_time_text(),
             ]
 
+            kind = self.status_kind(medication)
             for column_index, value in enumerate(values):
                 item = QTableWidgetItem(str(value))
                 item.setToolTip(str(value))
                 if column_index in [0, 4, 5, 7, 10]:
                     item.setTextAlignment(Qt.AlignCenter)
+                # Tabular figures so ids, dates, times, dosages and countdowns
+                # line up as columns rather than drifting per glyph width.
+                if column_index in self.MONO_COLUMNS:
+                    item.setFont(mono_font())
+                if column_index == 0:
+                    item.setData(StatusEdgeDelegate.STATUS_ROLE, kind)
                 self.table.setItem(row_index, column_index, item)
 
-            self.highlight_table_row(row_index, medication)
+            self.highlight_table_row(row_index, kind)
 
         self.table.resizeColumnsToContents()
         self.update_daily_summary()
@@ -858,19 +899,16 @@ class MainWindow(QMainWindow):
         )
         self.update_button_states()
 
-    def highlight_table_row(self, row_index: int, medication: Medication) -> None:
-        """Apply green, red, or yellow row background based on status."""
-        dark = current_theme() == "Dark Theme"
+    @staticmethod
+    def status_kind(medication: Medication) -> str:
+        """Classify a dose for the row edge bar and tint."""
         if medication.is_taken():
-            background = QColor("#14532d" if dark else "#dff3e7")
-        elif medication.is_overdue():
-            background = QColor("#7f1d1d" if dark else "#ffd7d7")
-        else:
-            if dark:
-                background = QColor("#0F172A") if row_index % 2 == 0 else QColor("#111C31")
-            else:
-                background = QColor("#ffffff") if row_index % 2 == 0 else QColor("#f7f9fc")
+            return TAKEN
+        return OVERDUE if medication.is_overdue() else DUE
 
+    def highlight_table_row(self, row_index: int, kind: str) -> None:
+        """Apply the near-invisible status tint; the edge bar carries the signal."""
+        background = QColor(row_tint(kind, row_index))
         for column_index in range(self.table.columnCount()):
             item = self.table.item(row_index, column_index)
             if item:

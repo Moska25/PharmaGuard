@@ -120,7 +120,7 @@ class LoginDialog(QDialog):
 
         if self.auth_manager.using_demo_admin:
             demo_hint = QLabel(
-                f"Demo mode — admin login <b>{DEMO_ADMIN_USERNAME}</b> / "
+                f"Demo mode - admin login <b>{DEMO_ADMIN_USERNAME}</b> / "
                 f"<b>{DEMO_ADMIN_PASSWORD}</b><br>"
                 "Set PHARMAGUARD_ADMIN_PASSWORD to disable this notice."
             )
@@ -146,6 +146,8 @@ class LoginDialog(QDialog):
 
         button_row = QHBoxLayout()
         self.login_button = QPushButton("Login")
+        self.login_button.setObjectName("PrimaryButton")
+        self.login_button.setDefault(True)
         self.create_user_button = QPushButton("Create User")
         self.cancel_button = QPushButton("Cancel")
 

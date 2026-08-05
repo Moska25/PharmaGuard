@@ -16,6 +16,10 @@ pharma_guard.db
 user_info.txt
 Requirments short.txt
 
+# Local UI handoff pack: working material for a design pass, not product.
+# Nothing committed may link to it, since it will not exist in a clone.
+ui-handoff/
+
 # Logs and temporary files
 *.log
 *.tmp

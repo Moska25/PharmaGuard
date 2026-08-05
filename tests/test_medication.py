@@ -9,7 +9,7 @@ from datetime import datetime
 
 import pytest
 
-from medication import Medication, sort_medications
+from medication import Medication, format_duration, sort_medications
 
 NOON = datetime(2026, 8, 4, 12, 0)
 
@@ -139,3 +139,39 @@ class TestSorting:
 
     def test_empty_list(self):
         assert sort_medications([], "Date newest first") == []
+
+
+class TestDurationFormatting:
+    """
+    Hours used to run unbounded, so a dose missed three weeks ago reported
+    "Overdue by 516h 7m" in both the daily view and the reminder popup.
+    """
+
+    @pytest.mark.parametrize(
+        "minutes, expected",
+        [
+            (0, "0m"),
+            (1, "1m"),
+            (59, "59m"),
+            (60, "1h 0m"),
+            (95, "1h 35m"),
+            (1439, "23h 59m"),
+            (1440, "1d 0h"),
+            (1500, "1d 1h"),
+            (30967, "21d 12h"),
+        ],
+    )
+    def test_rolls_up_at_each_boundary(self, minutes, expected):
+        assert format_duration(minutes) == expected
+
+    def test_negative_input_does_not_produce_a_negative_span(self):
+        assert format_duration(-5) == "0m"
+
+    def test_a_long_overdue_dose_reads_in_days_not_hours(self):
+        """The daily view's Remaining column, at the scale the seeder produces."""
+        medication = make(medication_date="2026-07-14", medicine_time="09:00")
+        assert medication.remaining_time_text(NOON) == "Overdue by 21d 3h"
+
+    def test_a_dose_later_today_still_reads_in_hours(self):
+        medication = make(medication_date="2026-08-04", medicine_time="15:30")
+        assert medication.remaining_time_text(NOON) == "3h 30m remaining"

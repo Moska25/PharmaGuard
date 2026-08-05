@@ -10,7 +10,7 @@ reminders ten minutes before a dose, at the dose time, and again when a dose is 
 <p align="center">
   <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-blue">
   <img alt="PyQt5" src="https://img.shields.io/badge/GUI-PyQt5-41cd52">
-  <img alt="tests" src="https://img.shields.io/badge/tests-112%20passing-brightgreen">
+  <img alt="tests" src="https://img.shields.io/badge/tests-153%20passing-brightgreen">
   <img alt="license" src="https://img.shields.io/badge/license-MIT-lightgrey">
 </p>
 
@@ -26,8 +26,9 @@ reminders ten minutes before a dose, at the dose time, and again when a dose is 
   a transparent upgrade path from a legacy hash format.
 - **Background scheduling** — APScheduler driving time-window reminder logic that
   survives missed ticks.
-- **Testing discipline** — 112 tests over auth, persistence, date arithmetic, and
-  scheduler state transitions, all with injected clocks and throwaway databases.
+- **Testing discipline** — 153 tests over auth, persistence, date arithmetic, timezone
+  handling, palette contrast, and scheduler state transitions, all with injected clocks and throwaway
+  databases.
 
 ## Features
 
@@ -36,7 +37,8 @@ reminders ten minutes before a dose, at the dose time, and again when a dose is 
 - Auto-generated usernames (`anaberidze0001`) with collision handling
 - Password policy: 8+ characters, upper, lower, digit, symbol
 - Accounts can be deactivated without deletion; deactivated logins are refused with a reason
-- Every login, failure, and record change is written to an append-only audit log
+- Every login, failed login, account change, and prescription change is written to an
+  append-only audit log, searchable and exportable to CSV from the Settings tab
 
 **Medication management**
 - Add, edit, delete, search, and filter reminders
@@ -60,14 +62,30 @@ reminders ten minutes before a dose, at the dose time, and again when a dose is 
 
 ## Screenshots
 
+**The reminder.** This is what the scheduler exists to produce. Each of the three events
+carries its own signal colour and states itself in words, so a missed dose is never
+mistaken for a heads-up:
+
 | | |
 |---|---|
-| ![Login](docs/screenshots/login.png)<br>**Login** — role selection, with demo credentials shown only when no admin password is configured | ![Dashboard](docs/screenshots/dashboard.png)<br>**Dashboard** — today's totals, upcoming doses, misses, and per-patient summary |
-| ![Statistics](docs/screenshots/statistics.png)<br>**Statistics** — adherence over a selected range, filtered by patient | ![Add medication](docs/screenshots/add-medication.png)<br>**Add medication** — scheduling with category and warning metadata |
-| ![Daily view](docs/screenshots/calendar-daily-view.png)<br>**Calendar / daily view** — the main working surface | ![Settings](docs/screenshots/settings-dark.png)<br>**Settings** — theme, notification, and sound preferences |
+| ![Missed dose reminder](docs/screenshots/reminder-missed.png)<br>**Missed** — red edge, and how late the dose now is | ![Ten-minute reminder](docs/screenshots/reminder-due.png)<br>**Due in ten minutes** — amber edge, same layout |
 
-Screenshots are generated, not hand-taken:
-`QT_QPA_PLATFORM=offscreen python tools/capture_screenshots.py [--theme dark]`.
+**The working surfaces.**
+
+| | |
+|---|---|
+| ![Daily view](docs/screenshots/calendar-daily-view.png)<br>**Calendar / daily view** — status reads as a 4px signal edge down the left of the table, with times and dosages in tabular figures | ![Dashboard](docs/screenshots/dashboard.png)<br>**Dashboard** — today's totals, upcoming doses, misses, and per-patient medical summary |
+| ![Statistics](docs/screenshots/statistics.png)<br>**Statistics** — completion over a selected range, filtered by patient | ![Daily view, dark](docs/screenshots/calendar-daily-view-dark.png)<br>**Dark theme** — both themes are generated from one token set, so neither can drift |
+| ![Add medication](docs/screenshots/add-medication.png)<br>**Add medication** — bilingual labels, with the clinical warning separated from the category | ![Settings](docs/screenshots/settings.png)<br>**Settings and audit log** — searchable, date-filtered, CSV-exportable |
+| ![User profile](docs/screenshots/user-profile.png)<br>**User profile** — account management, activation state, and per-patient medical history | ![Edit medication](docs/screenshots/edit-medication.png)<br>**Edit medication** — category and warning autofilled from the medicine reference data |
+
+Screenshots are generated, not hand-taken, from a throwaway seeded database, so they
+contain no real patient data and can be reproduced from a clean clone:
+
+```bash
+QT_QPA_PLATFORM=offscreen python tools/capture_screenshots.py
+QT_QPA_PLATFORM=offscreen python tools/capture_screenshots.py --theme dark
+```
 
 ## Architecture
 
@@ -142,9 +160,9 @@ QT_QPA_PLATFORM=offscreen python -m pytest tests/ -q
 ```
 
 ```
-........................................................................ [ 64%]
-........................................                                 [100%]
-112 passed in 1.38s
+........................................................................ [ 94%]
+.........                                                                [100%]
+153 passed in 1.54s
 ```
 
 The suite needs no display, no network, and no fixture database — every test builds
@@ -173,12 +191,25 @@ that two users share a password whenever their digests match. Rather than force 
 reset, `verify_password` accepts both formats and a successful login transparently
 re-hashes to PBKDF2. Users notice nothing and the weak hash disappears on first sign-in.
 
+**One token set, two themes, measured not eyeballed.** Light and dark generate from a
+single template in `styles.py`, so a rule cannot exist in one theme only; they had already
+drifted to 380 rules against 8 when they were maintained by hand. Every colour is pinned by
+a contrast test against WCAG AA, which is how disabled label text was caught sitting at
+2.62:1. Three colours from the design brief failed measurement and were substituted, each
+with the measured ratio recorded beside it in `styles.py`.
+
 **No database in the repository.** The app ships a seeder instead. An earlier version
 of this repository committed a live database containing real names and password hashes.
 Generated demo data is the only patient data that should ever exist here.
 
 **The audit log is append-only.** No update or delete path exists. In a care setting,
-the record of who changed a prescription matters as much as the prescription.
+the record of who changed a prescription matters as much as the prescription. It covers
+operator actions; the scheduler's own notification writes are not audited yet.
+
+**Timestamps are stored in UTC and converted for display.** SQLite's `CURRENT_TIMESTAMP`
+is UTC while every date the UI filters by is local, and comparing the two directly made
+the audit search drop entries near midnight without saying so. Storage stays UTC, which
+is right for an audit trail; the `'localtime'` conversion happens at the query boundary.
 
 ## Known limitations
 
@@ -186,7 +217,8 @@ the record of who changed a prescription matters as much as the prescription.
 - Notification delivery depends on the OS. `plyer` and `QSoundEffect` are guarded by
   try/except and degrade to in-app popups where unavailable.
 - Reminders fire only while the app is running; there is no OS-level background service.
-- The audit log has no UI-driven retention or export yet.
+- The audit log has no retention or archiving policy; it grows without bound and the
+  Settings view shows the 500 most recent matching entries.
 - Developed and primarily tested on Windows; verified to run on macOS.
 
 ## Roadmap
